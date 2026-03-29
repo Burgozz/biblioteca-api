@@ -1,5 +1,6 @@
 package com.biblioteca.api.controller;
 
+import com.biblioteca.api.service.NotificacaoService;
 import com.biblioteca.api.model.Livro;
 import com.biblioteca.api.repository.LivroRepository;
 import com.biblioteca.api.repository.AutorRepository;
@@ -22,17 +23,26 @@ public class LivroController {
     @Autowired
     private AutorRepository autorRepository;
 
+    @Autowired
+    private NotificacaoService notificacaoService;
+
+
     @PostMapping
     public ResponseEntity<?> criarLivro(@Valid @RequestBody Livro livro) {
-        // Valida se o autor existe antes de criar o livro
-        // Isso garante a integridade referencial
-        if (!autorRepository.existsById(livro.getAutor().getId())) {
-            return ResponseEntity.badRequest().body("Autor inválido!");
-        }
-
-        Livro novoLivro = livroRepository.save(livro);
-        return ResponseEntity.status(201).body(novoLivro);
+    if (!autorRepository.existsById(livro.getAutor().getId())) {
+        return ResponseEntity.badRequest().body("Autor invalido!");
     }
+
+    // 1. Salva o livro (caminho critico - rapido)
+    Livro novoLivro = livroRepository.save(livro);
+
+    // 2. Dispara notificacao assincrona (nao bloqueia a resposta!)
+    // Esta linha retorna IMEDIATAMENTE, a notificacao roda em outra thread
+    notificacaoService.notificarLivroCriado(novoLivro);
+
+    // 3. Responde 201 sem esperar a notificacao terminar
+    return ResponseEntity.status(201).body(novoLivro);
+}
 
     @GetMapping
     public ResponseEntity<List<Livro>> listarLivros() {
