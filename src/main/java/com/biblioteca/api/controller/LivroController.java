@@ -1,76 +1,51 @@
 package com.biblioteca.api.controller;
 
-import com.biblioteca.api.service.NotificacaoService;
+import java.util.List;
 import com.biblioteca.api.model.Livro;
 import com.biblioteca.api.repository.LivroRepository;
-import com.biblioteca.api.repository.AutorRepository;
+import com.biblioteca.api.service.AuditoriaService;
+import com.biblioteca.api.service.NotificacaoService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
-// Controller REST para gerenciar livros
 @RestController
 @RequestMapping("/livros")
 public class LivroController {
 
-    // Injeção de dependências dos repositories
     @Autowired
     private LivroRepository livroRepository;
 
     @Autowired
-    private AutorRepository autorRepository;
-
-    @Autowired
     private NotificacaoService notificacaoService;
 
+    @Autowired
+    private AuditoriaService auditoriaService;
 
     @PostMapping
-    public ResponseEntity<?> criarLivro(@Valid @RequestBody Livro livro) {
-    if (!autorRepository.existsById(livro.getAutor().getId())) {
-        return ResponseEntity.badRequest().body("Autor invalido!");
-    }
+    public ResponseEntity<Livro> criarLivro(@Valid @RequestBody Livro livro) {
+        Livro novoLivro = livroRepository.save(livro);
 
-    // 1. Salva o livro (caminho critico - rapido)
-    Livro novoLivro = livroRepository.save(livro);
+        // Chamada assíncrona do Caio
+        notificacaoService.enviarNotificacao(novoLivro);
 
-    // 2. Dispara notificacao assincrona (nao bloqueia a resposta!)
-    // Esta linha retorna IMEDIATAMENTE, a notificacao roda em outra thread
-    notificacaoService.notificarLivroCriado(novoLivro);
+        // Chamada assíncrona do Nicholas
+        auditoriaService.registrarCriacao(novoLivro);
 
-    // 3. Responde 201 sem esperar a notificacao terminar
-    return ResponseEntity.status(201).body(novoLivro);
-}
-
-    @GetMapping
-    public ResponseEntity<List<Livro>> listarLivros() {
-        List<Livro> livros = livroRepository.findAll();
-        return ResponseEntity.ok(livros);
-    }
-
-    @GetMapping("/{id}")
-    public ResponseEntity<Livro> buscarLivroPorId(@PathVariable Long id) {
-        return livroRepository.findById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        return ResponseEntity.status(201).body(novoLivro);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> atualizarLivro(@PathVariable Long id,
-                                             @Valid @RequestBody Livro livroAtualizado) {
+    public ResponseEntity<Livro> atualizarLivro(@PathVariable Long id, @Valid @RequestBody Livro livroAtualizado) {
         return livroRepository.findById(id).map(livro -> {
-            // Valida se o autor existe
-            if (!autorRepository.existsById(livroAtualizado.getAutor().getId())) {
-                return ResponseEntity.badRequest().body("Autor inválido!");
-            }
-
             livro.setTitulo(livroAtualizado.getTitulo());
             livro.setAno(livroAtualizado.getAno());
-            livro.setAutor(livroAtualizado.getAutor());
-
             Livro salvo = livroRepository.save(livro);
+
+            // Registro de atualização assíncrono
+            auditoriaService.registrarAtualizacao(salvo);
+
             return ResponseEntity.ok(salvo);
         }).orElse(ResponseEntity.notFound().build());
     }
@@ -80,7 +55,17 @@ public class LivroController {
         if (!livroRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
         }
+        
         livroRepository.deleteById(id);
+
+        // Registro de exclusão assíncrono
+        auditoriaService.registrarExclusao(id);
+
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping
+    public List<Livro> listarTodos() {
+        return livroRepository.findAll();
     }
 }

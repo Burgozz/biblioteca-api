@@ -1,4 +1,4 @@
-package main.java.com.biblioteca.api.service;
+package com.biblioteca.api.service;
 
 import com.biblioteca.api.model.Livro;
 import org.slf4j.Logger;
@@ -15,7 +15,7 @@ public class NotificacaoService {
 
     // @Async = este metodo roda em outra thread, sem bloquear a requisicao
     @Async
-    public void notificarLivroCriado(Livro livro) {
+    public void enviarNotificacao(Livro livro) {
         try {
             log.info("[ASYNC] Iniciando notificacao para o livro: {}", livro.getTitulo());
 
